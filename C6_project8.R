@@ -12,10 +12,14 @@ options(max.print = 20)
 library(doBy)
 # install.packages("caret")
 library(caret)
-# install.packages("e1071")
+# install.packages("e1071") #SVM훈련
 library(e1071)
-# install.packages("kernlab") #caret 패키지 SVM훈련 모델
+# install.packages("kernlab") #caret 패키지 SVM
 library(kernlab)
+# install.packages("class") #KNN
+library(class)
+# install.packages("nnet") #인공신경망
+library(nnet)
 
 ## spam 데이터 셋 ============================================================
 
@@ -31,21 +35,18 @@ library(kernlab)
   # 즉 spam 변수가 종속변수가 되며 나머지 A.1~57 변수가 예측변수가 된다.. 
   # 결측값은 없으며 전체에서 스팸메일은 1813개다.
 
-  # 종속변수가 oo형이고 설명변수가 oo형의 자료이므로,
-  # oooo기법의 사용이 가능하다.
-  # oooo기법에서는 CART, C5.0, QUEST방식의 기법이 활용 가능하다.
+  # 종속변수가 범주형이고 설명변수가 수치형의 자료이므로,
+  # 분류기법의 사용이 가능하다.
+  # 분류기법에서는 나이브베이즈, SVM, 로지스틱회귀분석, KNN, 인공신경망기법이 활용 가능하다.
 
 
 ### 1.데이터 전처리(예시) ======================================================
 
   # 1)데이터 셋 불러오기
-spam <- read.csv('spam.csv', header = T)
-str(spam)
+  spam <- read.csv('spam.csv', header = T)
+  str(spam)
   
-  # 2)데이터 추출/자료형 변환
-
-
-  # 3) train/test sets 생성
+  # 2) train/test sets 생성
   #(1)doby train/test set
   set.seed(9999)
   spam_train_doBy <- sampleBy(~spam, frac = 0.7, data = spam)
@@ -89,14 +90,12 @@ str(spam)
   spam_nb_doby
 
     
-  #(2)모델 평가
-  # 예측치 생성
+  #(2)예측 분류 결과 생성
   spam_nb_pred_doby <- predict(spam_nb_doby,
                                newdata = spam_test_doBy,
                                type = 'class')
-  table(spam_nb_pred_doby, spam_test_doBy$spam)
   
-  # 모델 성능 평가 지표(정확도 확인)
+  #(3)모델 평가
   confusionMatrix(spam_nb_pred_doby, as.factor(spam_test_doBy$spam))
 
   ## e1071 나이브베이즈는 약 72%의 정확도로 분류 하였다.
@@ -111,15 +110,14 @@ str(spam)
   spam_nb_caret
 
   
-  #(2)모델 평가
-  # 예측치 생성
+  #(2)예측 분류 결과 생성
   spam_nb_pred_caret <- predict(spam_nb_caret, newdata = spam_test_caret)
-  table(spam_nb_pred_caret, spam_test_caret$spam)
+
   
-  # 모델 성능 평가 지표(정확도 확인)
+  #(3)모델 평가
   confusionMatrix(spam_nb_pred_caret, as.factor(spam_test_caret$spam))
   
-  ## caret의 나이브베이즈는 70%의 정확도로 분류함.
+  ## caret의 나이브베이즈는 70%의 정확도로 분류하였다.
   
 
   
@@ -219,21 +217,112 @@ str(spam)
 
 # 4)최근접 이웃 모델(KNN) ####
 # 기본 패키지
+  #(1) 정규화
+  normalize <- function(x) {
+    return ((x-min(x))/(max(x)-min(x)))
+  }
+  
+  st_spam <- as.data.frame(lapply(spam[56:57], normalize))
+  sub <- spam[-c(56,57,58)]
+  nor_spam <- cbind(sub, st_spam)
+  
+  #doBy 표준화 학습,검정용 데이터 생성
+  set.seed(7777)
+  spam_train_doBy <- sampleBy(~spam, frac = 0.7, data = nor_spam)
+  spam_train_label_doBy <- spam$spam[nurow] 
+  spam_test_doBy <- nor_spam[-nurow, -58]
+  spam_test_label_doBy <- spam$spam[-nurow]
+  
+  
+  #(2)학습모델 생성
+  spam_knn_doBy <- knn(train = spam_train_doBy, 
+                       test = spam_test_doBy, 
+                       cl = spam_train_label_doBy, 
+                       k = 57)
+  spam_knn_doBy
+ 
+  #(3)모델 평가
+  confusionMatrix(factor(spam_test_label_doBy), factor(spam_knn_doBy))
+  
+  # class패키지의 knn모델은 약 88%의 정확도로 분류함.
+  
+  # caret 패키지
+  #(1) 정규화
+  set.seed(6666)
+  train_idx <- createDataPartition(spam$spam, p=0.7, list=F)
+  spam_train_caret <- nor_spam[train_idx,]
+  spam1 <- spam$spam[train_idx]
+  spam_train_caret <- cbind(spam_train_caret,spam1)
+  
+  spam_test_caret <- nor_spam[-train_idx,]
+  spam2 <- spam$spam[-train_idx]
+  spam_test_caret <- cbind(spam_test_caret,spam2)
+  
+  #(2)모델 생성
+  tune <- trainControl(method = 'cv', number = 10)
+  spam_knn_caret <- train(spam1 ~ ., data = spam_train_caret,
+                          method = 'knn',
+                          tuneGrid = expand.grid(k=57),
+                          trControl = tune)
+  #(3)예측 분류 결과 생성
+  spam_knn_pred_caret<- predict(spam_knn_caret, 
+                                newdata = spam_test_caret)
+  
+  #(4)모델 평가
+  confusionMatrix(spam_knn_pred_caret, as.factor(spam_test_caret$spam2))
+  
+  # caret패키지의 knn학습모델을 약 88% 정확도로 분류함.
+  
+
+
+  
+# 5)인공신경망 ####
+  # 기본 패키지
+  #(1)훈련, 검증용 데이터 생성
+  sub <- spam[-c(56,57)]
+  nor_spam <- cbind(sub, st_spam)
+  
+  set.seed(5555)
+  spam_train_doBy <- sampleBy(~spam, frac = 0.7, data = nor_spam)
+  spam_test_doBy <- nor_spam[-nurow,]
+  
   #(1)학습모델 생성
+  spam_nnet_doBy <- nnet(factor(spam) ~ ., 
+                         data = spam_train_doBy, 
+                         size = 4, 
+                         decay = 5e-04)  # 가장 정확하다는 옵션 선택. 
+  spam_nnet_doBy
   
+  #(2)예측 분류 결과 생성
+  spam_nnet_pred_doBy <- predict(spam_nnet_doBy, 
+                                 newdata = spam_test_doBy, 
+                                 type = 'class')
   
-  #(2)모델 평가
+  #(3)모델 평가
+  confusionMatrix(factor(spam_nnet_pred_doBy), factor(spam_test_doBy$spam))
   
+  # nnet패키지 인공신경망은 95% 정확도로 분류함.
   
   
   # caret 패키지
-  #(1)모델 생성 및 시각화
+  #(1)모델 생성
+  spma_nnet_caret <- train(spam1 ~ ., 
+                           data = spam_train_caret, 
+                           method = 'nnet', 
+                           trace = F,
+                           tuneGrid = expand.grid(.size= 4, .decay = 5e-04))
+  #(2)예측 분류 결과 생성
+  spam_nnet_pred_caret<- predict(spma_nnet_caret, 
+                                 newdata = spam_test_caret)
+  
+  #(3)모델 평가
+  confusionMatrix(spam_nnet_pred_caret, as.factor(spam_test_caret$spam2))
+  
+  # caret패키지 인공신경망은 95% 정확도로 분류함.
   
   
-  #(2)모델 평가
-
-
-
+  
+  
 
 
 ## 양식 #############################
