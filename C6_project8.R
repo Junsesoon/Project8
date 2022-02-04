@@ -166,3 +166,96 @@ library()
   
   
   #(2)모델 평가
+
+
+
+
+# iris 데이터 셋 ==============================================================
+
+# 설명)
+# Sepal.Length  continuous  꽃받침의 길이
+# Sepal.Width   continuous  꽃받침의 폭
+# Petal.Length  continuous  꽃잎의 길이
+# Petal.width   continuous  꽃잎의 폭
+# Species       factor      꽃의 종류
+
+
+## 1.데이터 전처리 ============================================================
+# 1)데이터 셋 불러오기
+data3 <- iris
+
+# 2)데이터 추출/자료형 변환
+# 라벨링
+iris_label <- ifelse(data3$Species == 'setosa', 0,
+                     ifelse(data3$Species == 'versicolor', 1,2))
+table(iris_label)
+data3$label <- iris_label
+
+
+sapply(data3,class)
+
+# 3) train/test sets 생성
+  #(1)doBy train/test sets 생성
+  set.seed(1111)
+  iris_doBy_train <- sampleBy(~Species, frac=0.7, data=data3) #전복의 성별을 기준으로 동일한 비율로 나눔
+  iris_doBy_test <- sampleBy(~Species, frac=0.3, data=data3)
+  
+  iris_doBy_train_mat <- as.matrix(iris_doBy_train[-c(5:6)])
+  iris_doBy_train_lab <- iris_doBy_train$label
+  dim(iris_doBy_train_mat)
+  length(iris_doBy_train_lab)
+  
+  #(2)caret train/test sets 생성
+  set.seed(1000)
+  iris_intrain <- createDataPartition(y=iris$Species, p=0.7, list=FALSE) 
+  iris_caret_train <-iris[iris_intrain, ]
+  iris_caret_test <-iris[-iris_intrain, ]
+  table(iris_caret_train$Species)
+  table(iris_caret_test$Species)
+
+
+
+
+## 2.분석 =====================================================================
+#### 2)앙상블(배깅) ####
+  # adabag 패키지
+  #(1)Bagging model 생성
+  iris.bagging <- bagging(Species~., data=iris_doBy_train[1:5], mfinal=10)
+  iris.bagging$importance
+  
+  #(2)도식화
+  plot(iris.bagging$trees[[10]])
+  text(iris.bagging$trees[[10]])
+  
+  #(3)예측값
+  baggingpred <- predict(iris.bagging, newdata=iris)
+  
+  #(4)정오분류표
+  baggingtb <- table(baggingpred$class, iris[,5])
+  sum(baggingtb[row(baggingtb) == col(baggingtb)])/sum(baggingtb)  # 정분류율
+  1-sum(baggingtb[row(baggingtb) == col(baggingtb)])/sum(baggingtb)  # 오분류율
+  
+  # Caret Package
+  #(1)Caret Package 배깅 모델 생성
+  ctrl <- trainControl(method = 'cv',
+                       number = 10)
+  gyu <- train(Species ~ . ,
+               data = iris_caret_train,
+               method = 'treebag',
+               trControl = ctrl)
+  gyu
+  
+  #(2)예측 분류 결과 생성
+  gyu_pred <- predict(gyu, newdata = iris_caret_test)
+  
+  #(3)적용 분류 결과 도출
+  table(gyu_pred, iris_caret_test$Species)
+  
+  #(4)모델 성능 평가 지표(정확도 확인)
+  confusionMatrix(gyu_pred, iris_caret_test$Species)
+  
+  # 정확도 100%
+  
+  
+
+  
