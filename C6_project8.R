@@ -258,4 +258,44 @@ sapply(data3,class)
   
   
 
+
+#### 3)앙상블(부스팅) ####
+# adabag 패키지
+  #(1)boosting model 생성
+  boo.adabag <- boosting(Species~., data = iris_doBy_train,
+                         boos = TRUE,
+                         mfinal = 10)
+  boo.adabag$importance
   
+  #(2)도식화
+  plot(boo.adabag$trees[[10]])
+  text(boo.adabag$trees[[10]])
+  
+  #(3)예측값
+  pred <- predict(boo.adabag, newdata = iris_doBy_test)
+  
+  #(4)정오분류표
+  tb <- table(pred$class, iris_doBy_test[,5])
+  sum(tb[row(tb) == col(tb)])/sum(tb)  # 정분류율
+  1-sum(tb[row(tb) == col(tb)])/sum(tb)  # 오분류율
+
+# Caret Package
+  #(1)Caret Package 부스팅 학습 모델 설정
+  ctrl <- trainControl(method = 'cv', number = 3) ## method : 샘플링을 하는 방법을 결정
+  m1 <- train(Species ~ . , data = iris_caret_train,
+              method = 'AdaBoost.M1',
+              trControl = ctrl)
+  m1
+  
+  #(2)예측 분류 결과 생성
+  m1_pred <- predict(m1, newdata = iris_caret_test)
+  
+  #(3)적용 분류 결과 도출
+  table(m1_pred, iris_caret_test$Species)
+  
+  #(4)모델 성능 평가 지표(정확도 확인)
+  confusionMatrix(m1_pred, iris_caret_test$Species)
+  # 정확도 100%
+
+
+
